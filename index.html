@@ -270,7 +270,8 @@ function restore(d){
   setSig(d.sig||null,true);
   syncFree();updateDur();
 }
-function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,staff:[]}}
+var DEFAULT_WORK='舞台照明設備保守点検';
+function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,work:DEFAULT_WORK,staff:[]}}
 function clearForm(){
   FIELDS.forEach(function(f){$(f).value=''});
   for(var i=0;i<STAFF_ROWS;i++){$('s'+i+'name').value='';$('s'+i+'free').value='';setT(i,'f','');setT(i,'t','')}
