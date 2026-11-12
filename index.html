@@ -29,6 +29,9 @@ select{background-image:linear-gradient(45deg,transparent 50%,#8893a2 50%),linea
 textarea{resize:vertical;min-height:96px;line-height:1.5}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
 .free{margin-top:8px}
+.tabs{display:flex;background:#eef2f7;border-radius:12px;padding:4px;gap:4px;margin-bottom:10px}
+.tabs button{flex:1;border:0;background:transparent;padding:13px 8px;border-radius:9px;font:inherit;font-size:16px;color:var(--muted)}
+.tabs button.on{background:#fff;color:var(--navy);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .hidden{display:none!important}
 .row-dt{display:grid;grid-template-columns:60px 1fr 140px;gap:10px;align-items:center;margin-bottom:10px}
 .row-dt .tag{font-weight:600;text-align:center;background:#eef2f7;border-radius:8px;padding:12px 0}
@@ -109,7 +112,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 
   <section>
     <h2>作業内容</h2>
-    <textarea id="work" rows="3" placeholder="作業内容を入力（3行程度まで）"></textarea>
+    <div class="tabs" id="workTabs"></div>
+    <input type="hidden" id="workType">
+    <textarea id="work" rows="2" placeholder="補足があれば入力（報告書の3行目に入ります）"></textarea>
   </section>
 
   <section>
@@ -253,7 +258,7 @@ function syncFree(){
 }
 
 /* ---------- 値の取り出し・復元 ---------- */
-var FIELDS=['venueSel','venueFree','issueDate','fromDate','fromHour','toDate','toHour','work','remarks'];
+var FIELDS=['venueSel','venueFree','issueDate','workType','fromDate','fromHour','toDate','toHour','work','remarks'];
 function collect(){
   var d={};FIELDS.forEach(function(f){d[f]=$(f).value});
   d.staff=[];for(var i=0;i<STAFF_ROWS;i++)d.staff.push({sel:$('s'+i+'name').value,free:$('s'+i+'free').value,from:getT(i,'f'),to:getT(i,'t')});
@@ -267,11 +272,17 @@ function restore(d){
   FIELDS.forEach(function(f){if(f!=='venueSel'&&f!=='venueFree'&&d[f]!=null)$(f).value=d[f]});
   setSelect('venueSel','venueFree',d.venueSel,d.venueFree,lists.venues);
   (d.staff||[]).forEach(function(s,i){if(i>=STAFF_ROWS)return;setSelect('s'+i+'name','s'+i+'free',s.sel,s.free,lists.staff);setT(i,'f',s.from);setT(i,'t',s.to)});
+  if(!$('workType').value && WORK_TYPES.indexOf(($('work').value||'').trim())>=0){$('workType').value=$('work').value.trim();$('work').value=''}
+  renderTabs();
   setSig(d.sig||null,true);
   syncFree();updateDur();
 }
-var DEFAULT_WORK='舞台照明設備保守点検';
-function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,work:DEFAULT_WORK,staff:[]}}
+var WORK_TYPES=['舞台照明設備保守点検','舞台照明設備修繕'];
+function renderTabs(){
+  $('workTabs').innerHTML=WORK_TYPES.map(function(v){return '<button type="button" data-v="'+esc(v)+'" class="'+($('workType').value===v?'on':'')+'">'+esc(v)+'</button>'}).join('');
+}
+$('workTabs').addEventListener('click',function(e){var b=e.target.closest('button[data-v]');if(!b)return;$('workType').value=b.dataset.v;renderTabs();saveDraft()});
+function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,workType:WORK_TYPES[0],work:'',staff:[]}}
 function clearForm(){
   FIELDS.forEach(function(f){$(f).value=''});
   for(var i=0;i<STAFF_ROWS;i++){$('s'+i+'name').value='';$('s'+i+'free').value='';setT(i,'f','');setT(i,'t','')}
@@ -414,8 +425,13 @@ function drawForm(ctx,d){
   var td=ymd(d.toDate);if(td){t(td.d,598,226,14)}
   if(d.toHour!=='')t(d.toHour,676,226,14);
   // 作業内容（1行目はラベルの右、2・3行目は全幅）
-  var wb=block(d.work,[555,636,636],3,[14,13,12,11,10,9]);
-  wb.lines.forEach(function(s,li){t(s,li===0?205:125,[253,280,307][li],wb.size,'left')});
+  if(d.workType){
+    t(d.workType,125,280,14,'left');
+    fit(String(d.work||'').replace(/\s*\n\s*/g,'　').trim(),125,307,636,14,'left');
+  }else{
+    var wb=block(d.work,[636,636],2,[14,13,12,11,10,9]);
+    wb.lines.forEach(function(s,li){t(s,125,[280,307][li],wb.size,'left')});
+  }
   // 出張者
   (d.staff||[]).forEach(function(s,i){
     var cy=R[i]+(R[i+1]-R[i])*0.62,name=staffName(s);
