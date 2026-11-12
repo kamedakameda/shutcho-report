@@ -1,6 +1,6 @@
 // オフラインでも開けるようにアプリ本体をiPadに保存しておく
-const CACHE = 'shutcho-v6';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
+const CACHE = 'shutcho-v9';
+const ASSETS = ['./', './index.html', './kyk.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
