@@ -54,6 +54,8 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
 #padWrap{position:relative;margin:0 auto;border:2px dashed #b7c0cc;border-radius:12px;background:#fff;overflow:hidden}
 #padWrap.rows4{background:linear-gradient(#b9c4d3,#b9c4d3) 0 25%/100% 2px no-repeat,linear-gradient(#b9c4d3,#b9c4d3) 0 50%/100% 2px no-repeat,linear-gradient(#b9c4d3,#b9c4d3) 0 75%/100% 2px no-repeat,#fff}
 #padCanvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#padOverlay,#padOverlay *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#padWrap{touch-action:none}
 .padhint{font-size:13px;color:var(--muted);margin-bottom:8px}
 .pvwrap{position:relative}
 #pvCanvas{width:100%;height:auto;border:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.08);background:#fff;display:block}
@@ -249,6 +251,8 @@ var base=null,strokes=[],live=null;   // base=前回までの手書き画像、s
 function hwDef(k){for(var i=0;i<HW.length;i++)if(HW[i].k===k)return HW[i]}
 function openPad(k){
   var h=hwDef(k);cur=h;
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  try{window.getSelection().removeAllRanges()}catch(e){}
   var pb=document.querySelector('#pvOverlay .panel-body');if(pb)pb.scrollTop=0;
   $('padTitle').textContent=h.t;$('padHint').textContent=h.hint;
   var asp=h.rows4?h.w/h.h:h.aspect;
@@ -265,6 +269,9 @@ function openPad(k){
     redraw();
   });
 }
+// iPadでペン入力中に文字選択やスクリブルが動かないようにする
+['touchstart','touchmove','touchend'].forEach(function(t){pad.addEventListener(t,function(e){e.preventDefault()},{passive:false})});
+$('padWrap').addEventListener('touchmove',function(e){e.preventDefault()},{passive:false});
 function setStyle(){pctx.lineCap='round';pctx.lineJoin='round';pctx.strokeStyle='#0b1a33';pctx.fillStyle='#0b1a33'}
 function ppt(e){var r=pad.getBoundingClientRect();var s=padW/r.width;return{x:(e.clientX-r.left)*s,y:(e.clientY-r.top)*s,p:(e.pointerType==='pen'&&e.pressure)?e.pressure:0.5}}
 function lw(p){return padW/(cur&&cur.rows4?260:330)*(0.55+p*0.9)}
