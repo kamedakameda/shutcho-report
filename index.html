@@ -110,8 +110,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
     <h2>基本情報</h2>
     <div class="grid g2">
       <label class="f">出張先
-        <select id="venueSel"></select>
-        <input id="venueFree" class="free hidden" placeholder="出張先を入力" autocomplete="off">
+        <select id="venueSel" class="hidden"></select>
+        <input id="venueFree" placeholder="出張先を入力" autocomplete="off">
       </label>
       <label class="f">発行日<input id="issueDate" type="date"></label>
     </div>
@@ -211,13 +211,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
   <div class="panel" style="width:min(620px,100%)">
     <div class="panel-head"><h3>リスト設定</h3></div>
     <div class="panel-body">
-      <h2 style="font-size:14px;color:var(--muted);margin:0 0 8px">出張先（会館名）</h2>
-      <ul class="list" id="listVenues"></ul>
-      <div class="addrow"><input id="addVenue" placeholder="会館名を追加"><button class="btn" id="btnAddVenue" type="button">追加</button></div>
-      <h2 style="font-size:14px;color:var(--muted);margin:22px 0 8px">出張者名</h2>
+      <h2 style="font-size:14px;color:var(--muted);margin:0 0 8px">出張者名</h2>
       <ul class="list" id="listStaff"></ul>
       <div class="addrow"><input id="addStaff" placeholder="名前を追加"><button class="btn" id="btnAddStaff" type="button">追加</button></div>
       <p class="note">↑↓で並び順を変えられます。リストはこのiPadに保存されます。</p>
+      <p class="note">バージョン：2026-11-17d</p>
     </div>
     <div class="panel-foot"><button class="btn primary" id="setClose" type="button">閉じる</button></div>
   </div>
@@ -285,7 +283,6 @@ function refreshSelects(){
 refreshSelects();
 
 function syncFree(){
-  $('venueFree').classList.toggle('hidden',$('venueSel').value!==FREE);
   for(var i=0;i<STAFF_ROWS;i++) $('s'+i+'free').classList.toggle('hidden',$('s'+i+'name').value!==FREE);
 }
 
@@ -323,7 +320,7 @@ function setSelect(selId,freeId,val,free,items){
 }
 function restore(d){
   FIELDS.forEach(function(f){if(f!=='venueSel'&&f!=='venueFree'&&d[f]!=null)$(f).value=d[f]});
-  setSelect('venueSel','venueFree',d.venueSel,d.venueFree,lists.venues);
+  $('venueSel').value=FREE;$('venueFree').value=(d.venueSel&&d.venueSel!==FREE)?d.venueSel:(d.venueFree||'');
   (d.staff||[]).forEach(function(s,i){if(i>=STAFF_ROWS)return;setSelect('s'+i+'name','s'+i+'free',s.sel,s.free,lists.staff);setT(i,'f',s.from);setT(i,'t',s.to)});
   if(!$('workType').value && WORK_TYPES.indexOf(($('work').value||'').trim())>=0){$('workType').value=$('work').value.trim();$('work').value=''}
   renderTabs();
@@ -646,7 +643,7 @@ function renderList(kind,ulId){
   if(!items.length){ul.innerHTML='<li><span style="color:var(--muted)">まだありません</span></li>';return}
   ul.innerHTML=items.map(function(v,i){return '<li><span>'+esc(v)+'</span><button data-k="'+kind+'" data-a="up" data-i="'+i+'" aria-label="上へ">↑</button><button data-k="'+kind+'" data-a="down" data-i="'+i+'" aria-label="下へ">↓</button><button class="del" data-k="'+kind+'" data-a="del" data-i="'+i+'">削除</button></li>'}).join('');
 }
-function renderSettings(){renderList('venues','listVenues');renderList('staff','listStaff')}
+function renderSettings(){renderList('staff','listStaff')}
 function listChanged(){store(LS_LISTS,lists);var d=collect();refreshSelects();restore(d);renderSettings()}
 $('setOverlay').addEventListener('click',function(e){
   var b=e.target.closest('button[data-a]');if(!b)return;
@@ -661,9 +658,7 @@ function addItem(kind,inputId){
   if(lists[kind].indexOf(v)>=0){toast('すでにリストにあります');return}
   lists[kind].push(v);$(inputId).value='';listChanged();toast('「'+v+'」を追加しました');
 }
-$('btnAddVenue').onclick=function(){addItem('venues','addVenue')};
 $('btnAddStaff').onclick=function(){addItem('staff','addStaff')};
-$('addVenue').addEventListener('keydown',function(e){if(e.key==='Enter')addItem('venues','addVenue')});
 $('addStaff').addEventListener('keydown',function(e){if(e.key==='Enter')addItem('staff','addStaff')});
 $('btnSettings').onclick=function(){renderSettings();$('setOverlay').classList.remove('hidden')};
 $('setClose').onclick=function(){$('setOverlay').classList.add('hidden')};
@@ -673,7 +668,17 @@ var draft=load(LS_DRAFT,null);
 restore(draft||blank());
 if(!draft)saveDraft();
 
-if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(function(){})}
+// 新しい版があれば自動で切り替える（開いたとき・アプリに戻ったときに確認）
+if('serviceWorker' in navigator&&location.protocol==='https:'){
+  var hadCtrl=!!navigator.serviceWorker.controller,reloaded=false;
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){
+    reg.update().catch(function(){});
+    document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')reg.update().catch(function(){})});
+  }).catch(function(){});
+  navigator.serviceWorker.addEventListener('controllerchange',function(){
+    if(!hadCtrl||reloaded)return;reloaded=true;saveDraft();location.reload();
+  });
+}
 })();
 </script>
 </body>

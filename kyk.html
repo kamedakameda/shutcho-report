@@ -129,6 +129,7 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
       <div id="padWrap"><canvas id="padCanvas"></canvas></div>
     </div>
     <div class="panel-foot">
+      <button class="btn" id="padMode" type="button" style="margin-right:auto">指でも書く：ON</button>
       <button class="btn" id="padUndo" type="button">1つ戻す</button>
       <button class="btn danger" id="padClear" type="button">全部消す</button>
       <button class="btn" id="padCancel" type="button">キャンセル</button>
@@ -247,7 +248,7 @@ $('btnNew').onclick=function(){if(window.confirm('入力内容と手書きを消
 
 /* ---------- 手書きパッド ---------- */
 var pad=$('padCanvas'),pctx=pad.getContext('2d'),cur=null,drawing=false,padW=0,padH=0;
-var base=null,strokes=[],live=null;   // base=前回までの手書き画像、strokes=今回書いた線（点の記録）
+var base=null,strokes=[],live=null,penSeen=false,fingerOK=true,activeId=null,activeType='';   // base=前回までの手書き画像、strokes=今回書いた線（点の記録）
 function hwDef(k){for(var i=0;i<HW.length;i++)if(HW[i].k===k)return HW[i]}
 function openPad(k){
   var h=hwDef(k);cur=h;
@@ -259,7 +260,7 @@ function openPad(k){
   var wrap=$('padWrap');wrap.className=h.rows4?'rows4':'';
   wrap.style.width='min(100%, calc((70vh - 150px) * '+asp+'))';wrap.style.aspectRatio=asp+' / 1';
   $('padOverlay').classList.remove('hidden');
-  base=null;strokes=[];
+  base=null;strokes=[];penSeen=false;fingerOK=true;activeId=null;drawing=false;live=null;updMode();
   requestAnimationFrame(function(){
     // 出張報告と同じく「画面の実寸×画面の解像度」でキャンバスを作る
     var r=wrap.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
@@ -283,12 +284,28 @@ function drawStroke(pts){
   if(pts.length>1){var l=pts[pts.length-1];pctx.beginPath();pctx.moveTo(mid.x,mid.y);pctx.lineTo(l.x,l.y);pctx.stroke()}
 }
 function redraw(){pctx.setTransform(1,0,0,1,0,0);pctx.clearRect(0,0,padW,padH);setStyle();if(base)pctx.drawImage(base,0,0,padW,padH);strokes.forEach(drawStroke)}
-pad.addEventListener('pointerdown',function(e){e.preventDefault();pad.setPointerCapture(e.pointerId);drawing=true;setStyle();
-  var p=ppt(e);live={pts:[p],mid:p};strokes.push(live.pts);dot(p)});
-pad.addEventListener('pointermove',function(e){if(!drawing)return;e.preventDefault();
+/* 手のひら対策：ペンを使ったら、そのあいだ指（手の側面）の線は無視する */
+function updMode(){$('padMode').textContent='指でも書く：'+(fingerOK?'ON':'OFF')}
+$('padMode').onclick=function(){fingerOK=!fingerOK;updMode();toast(fingerOK?'指でも書けます':'ペンだけで書けます（手が当たっても線は入りません）')};
+pad.addEventListener('pointerdown',function(e){
+  e.preventDefault();
+  if(e.pointerType==='pen'){
+    if(!penSeen){penSeen=true;fingerOK=false;updMode()}
+    // 先に手が当たって引いた線は消す
+    var had=strokes.length;strokes=strokes.filter(function(st){return st.type!=='touch'});
+    if(activeType==='touch'){drawing=false;live=null;activeId=null}
+    if(strokes.length!==had)redraw();
+  }else{
+    if(!fingerOK)return;
+    if(activeId!==null)return;
+  }
+  try{pad.setPointerCapture(e.pointerId)}catch(_){}
+  activeId=e.pointerId;activeType=e.pointerType;drawing=true;setStyle();
+  var p=ppt(e),pts=[p];pts.type=e.pointerType;live={pts:pts,mid:p};strokes.push(pts);dot(p)});
+pad.addEventListener('pointermove',function(e){if(!drawing||e.pointerId!==activeId)return;e.preventDefault();
   var evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];if(!evs.length)evs=[e];
   evs.forEach(function(ev){var p=ppt(ev),pts=live.pts;live.mid=seg(pts[pts.length-1],live.mid,p);pts.push(p)})});
-function endStroke(){if(!drawing)return;drawing=false;var pts=live.pts,l=pts[pts.length-1];
+function endStroke(e){if(!drawing||(e&&e.pointerId!==activeId))return;drawing=false;activeId=null;activeType='';var pts=live.pts,l=pts[pts.length-1];
   if(pts.length>1){pctx.beginPath();pctx.moveTo(live.mid.x,live.mid.y);pctx.lineTo(l.x,l.y);pctx.stroke()}live=null}
 pad.addEventListener('pointerup',endStroke);pad.addEventListener('pointercancel',endStroke);
 $('padUndo').onclick=function(){if(!strokes.length){toast('これ以上戻せません');return}strokes.pop();redraw()};
@@ -405,7 +422,7 @@ function renderSettings(){
     return '<div class="lh"'+(li===0?' style="margin-top:0"':'')+'>'+L.label+'</div><ul class="list">'+
       (items.length?items.map(function(v,i){return '<li><span>'+esc(v)+'</span><button data-k="'+L.k+'" data-a="up" data-i="'+i+'">↑</button><button data-k="'+L.k+'" data-a="down" data-i="'+i+'">↓</button><button class="del" data-k="'+L.k+'" data-a="del" data-i="'+i+'">削除</button></li>'}).join(''):'<li><span style="color:var(--muted)">まだありません</span></li>')+
       '</ul><div class="addrow"><input id="add_'+L.k+'" placeholder="'+L.label+'を追加"><button class="btn" data-k="'+L.k+'" data-a="add" type="button">追加</button></div>';
-  }).join('')+'<p style="font-size:13px;color:var(--muted)">↑↓で並び順を変えられます。リストはこの端末に保存されます。</p>';
+  }).join('')+'<p style="font-size:13px;color:var(--muted)">↑↓で並び順を変えられます。リストはこの端末に保存されます。</p><p style="font-size:13px;color:var(--muted)">バージョン：2026-11-17d</p>';
 }
 function listChanged(){store(LS_LISTS,lists);var d=collect();refreshSelects();restore(d);renderSettings()}
 $('setBody').addEventListener('click',function(e){
@@ -422,7 +439,17 @@ $('setClose').onclick=function(){$('setOverlay').classList.add('hidden')};
 
 /* ---------- 起動 ---------- */
 var draft=load(LS_DRAFT,null);restore(draft||blank());if(!draft)saveDraft();
-if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(function(){})}
+// 新しい版があれば自動で切り替える（開いたとき・アプリに戻ったときに確認）
+if('serviceWorker' in navigator&&location.protocol==='https:'){
+  var hadCtrl=!!navigator.serviceWorker.controller,reloaded=false;
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){
+    reg.update().catch(function(){});
+    document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')reg.update().catch(function(){})});
+  }).catch(function(){});
+  navigator.serviceWorker.addEventListener('controllerchange',function(){
+    if(!hadCtrl||reloaded)return;reloaded=true;saveDraft();location.reload();
+  });
+}
 })();
 </script>
 </body>
