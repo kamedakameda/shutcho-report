@@ -244,41 +244,50 @@ $('form').addEventListener('change',function(){syncFree();saveDraft()});
 $('btnNew').onclick=function(){if(window.confirm('入力内容と手書きを消して新しく作りますか？\n（リスト設定は消えません）')){restore(blank());saveDraft();window.scrollTo(0,0);toast('新しい表にしました')}};
 
 /* ---------- 手書きパッド ---------- */
-var pad=$('padCanvas'),pctx=pad.getContext('2d'),cur=null,strokes=[],drawing=false,last=null,lastMid=null,padW=0,padH=0;
+var pad=$('padCanvas'),pctx=pad.getContext('2d'),cur=null,drawing=false,padW=0,padH=0;
+var base=null,strokes=[],live=null;   // base=前回までの手書き画像、strokes=今回書いた線（点の記録）
 function hwDef(k){for(var i=0;i<HW.length;i++)if(HW[i].k===k)return HW[i]}
 function openPad(k){
   var h=hwDef(k);cur=h;
   var pb=document.querySelector('#pvOverlay .panel-body');if(pb)pb.scrollTop=0;
   $('padTitle').textContent=h.t;$('padHint').textContent=h.hint;
   var asp=h.rows4?h.w/h.h:h.aspect;
-  $('padWrap').className=h.rows4?'rows4':'';
-  var wrap=$('padWrap');
+  var wrap=$('padWrap');wrap.className=h.rows4?'rows4':'';
   wrap.style.width='min(100%, calc((70vh - 150px) * '+asp+'))';wrap.style.aspectRatio=asp+' / 1';
   $('padOverlay').classList.remove('hidden');
+  base=null;strokes=[];
   requestAnimationFrame(function(){
-    padW=1800;padH=Math.round(1800/asp);pad.width=padW;pad.height=padH;
-    pctx.setTransform(1,0,0,1,0,0);pctx.clearRect(0,0,padW,padH);
-    pctx.lineCap='round';pctx.lineJoin='round';pctx.strokeStyle='#0b1a33';pctx.fillStyle='#0b1a33';
-    strokes=[];
-    if(ink[k]){var im=new Image();im.onload=function(){pctx.drawImage(im,0,0,padW,padH);strokes.push(pctx.getImageData(0,0,padW,padH))};im.src=ink[k]}
-    else strokes.push(null);
+    // 出張報告と同じく「画面の実寸×画面の解像度」でキャンバスを作る
+    var r=wrap.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+    padW=Math.max(1,Math.round(r.width*dpr));padH=Math.max(1,Math.round(r.width/asp*dpr));
+    pad.width=padW;pad.height=padH;
+    if(ink[k]){var im=new Image();im.onload=function(){base=im;redraw()};im.src=ink[k]}
+    redraw();
   });
 }
+function setStyle(){pctx.lineCap='round';pctx.lineJoin='round';pctx.strokeStyle='#0b1a33';pctx.fillStyle='#0b1a33'}
 function ppt(e){var r=pad.getBoundingClientRect();var s=padW/r.width;return{x:(e.clientX-r.left)*s,y:(e.clientY-r.top)*s,p:(e.pointerType==='pen'&&e.pressure)?e.pressure:0.5}}
 function lw(p){return padW/(cur&&cur.rows4?260:330)*(0.55+p*0.9)}
-pad.addEventListener('pointerdown',function(e){e.preventDefault();pad.setPointerCapture(e.pointerId);drawing=true;last=ppt(e);lastMid=last;
-  pctx.beginPath();pctx.arc(last.x,last.y,lw(last.p)/2,0,Math.PI*2);pctx.fill()});
+function dot(p){pctx.beginPath();pctx.arc(p.x,p.y,lw(p.p)/2,0,Math.PI*2);pctx.fill()}
+function seg(a,mid0,p){var mid={x:(a.x+p.x)/2,y:(a.y+p.y)/2};pctx.beginPath();pctx.lineWidth=lw(p.p);pctx.moveTo(mid0.x,mid0.y);pctx.quadraticCurveTo(a.x,a.y,mid.x,mid.y);pctx.stroke();return mid}
+function drawStroke(pts){
+  if(!pts.length)return;dot(pts[0]);var mid=pts[0];
+  for(var i=1;i<pts.length;i++)mid=seg(pts[i-1],mid,pts[i]);
+  if(pts.length>1){var l=pts[pts.length-1];pctx.beginPath();pctx.moveTo(mid.x,mid.y);pctx.lineTo(l.x,l.y);pctx.stroke()}
+}
+function redraw(){pctx.setTransform(1,0,0,1,0,0);pctx.clearRect(0,0,padW,padH);setStyle();if(base)pctx.drawImage(base,0,0,padW,padH);strokes.forEach(drawStroke)}
+pad.addEventListener('pointerdown',function(e){e.preventDefault();pad.setPointerCapture(e.pointerId);drawing=true;setStyle();
+  var p=ppt(e);live={pts:[p],mid:p};strokes.push(live.pts);dot(p)});
 pad.addEventListener('pointermove',function(e){if(!drawing)return;e.preventDefault();
   var evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];if(!evs.length)evs=[e];
-  evs.forEach(function(ev){var p=ppt(ev),mid={x:(last.x+p.x)/2,y:(last.y+p.y)/2};
-    pctx.beginPath();pctx.lineWidth=lw(p.p);pctx.moveTo(lastMid.x,lastMid.y);pctx.quadraticCurveTo(last.x,last.y,mid.x,mid.y);pctx.stroke();last=p;lastMid=mid})});
-function endStroke(){if(!drawing)return;drawing=false;pctx.beginPath();pctx.moveTo(lastMid.x,lastMid.y);pctx.lineTo(last.x,last.y);pctx.stroke();
-  strokes.push(pctx.getImageData(0,0,padW,padH));if(strokes.length>30)strokes.splice(1,1)}
+  evs.forEach(function(ev){var p=ppt(ev),pts=live.pts;live.mid=seg(pts[pts.length-1],live.mid,p);pts.push(p)})});
+function endStroke(){if(!drawing)return;drawing=false;var pts=live.pts,l=pts[pts.length-1];
+  if(pts.length>1){pctx.beginPath();pctx.moveTo(live.mid.x,live.mid.y);pctx.lineTo(l.x,l.y);pctx.stroke()}live=null}
 pad.addEventListener('pointerup',endStroke);pad.addEventListener('pointercancel',endStroke);
-$('padUndo').onclick=function(){if(strokes.length<=1){toast('これ以上戻せません');return}strokes.pop();var s=strokes[strokes.length-1];pctx.clearRect(0,0,padW,padH);if(s)pctx.putImageData(s,0,0)};
-$('padClear').onclick=function(){pctx.clearRect(0,0,padW,padH);strokes.push(null)};
+$('padUndo').onclick=function(){if(!strokes.length){toast('これ以上戻せません');return}strokes.pop();redraw()};
+$('padClear').onclick=function(){base=null;strokes=[];redraw()};
 $('padCancel').onclick=function(){$('padOverlay').classList.add('hidden')};
-function isEmpty(){var d=pctx.getImageData(0,0,padW,padH).data;for(var i=3;i<d.length;i+=16)if(d[i]>10)return false;return true}
+function isEmpty(){return !base&&!strokes.length}
 $('padOk').onclick=function(){
   if(isEmpty())delete ink[cur.k];else ink[cur.k]=pad.toDataURL('image/png');
   $('padOverlay').classList.add('hidden');renderHwThumbs();saveDraft();

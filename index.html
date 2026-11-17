@@ -31,6 +31,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .free{margin-top:8px}
 .tabs{display:flex;background:#eef2f7;border-radius:12px;padding:4px;gap:4px;margin-bottom:10px}
 .tabs button{flex:1;border:0;background:transparent;padding:13px 8px;border-radius:9px;font:inherit;font-size:16px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.chips:empty::before{content:"まだ日付がありません";color:var(--muted);font-size:14px}
+.chip{background:#eef2f7;border-radius:22px;padding:6px 6px 6px 14px;display:flex;gap:8px;align-items:center;font-size:16px}
+.chip button{border:0;background:#fff;border-radius:50%;width:30px;height:30px;font-size:15px;color:var(--danger)}
+.addrow{display:flex;gap:8px}.addrow input{flex:1}
+.nodur .dur{visibility:hidden}
 .tabs button.on{background:#fff;color:var(--navy);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .hidden{display:none!important}
 .row-dt{display:grid;grid-template-columns:60px 1fr 140px;gap:10px;align-items:center;margin-bottom:10px}
@@ -79,6 +85,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .list li button.del{background:#fbe9e7;color:var(--danger);width:auto;padding:0 12px;font-size:14px}
 .addrow{display:flex;gap:8px}
 .addrow input{flex:1}
+.hitem{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.hitem .ht{font-weight:600;font-size:16px}
+.hitem .hs{font-size:14px;color:var(--muted);margin:4px 0 10px;line-height:1.5}
+.hitem .hb{display:flex;gap:8px;flex-wrap:wrap}
 .toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:#1d2530;color:#fff;padding:12px 18px;border-radius:12px;font-size:15px;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .note{font-size:13px;color:var(--muted);margin-top:8px}
@@ -90,6 +100,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
   <h1>出張作業報告書</h1>
   <a href="kyk.html" style="background:rgba(255,255,255,.14);color:#fff;border-radius:10px;padding:9px 14px;font-size:15px;text-decoration:none">危険予知へ</a>
   <button id="btnNew" type="button">新規</button>
+  <button id="btnHist" type="button">履歴</button>
   <button id="btnSettings" type="button">リスト設定</button>
 </header>
 
@@ -107,8 +118,16 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 
   <section>
     <h2>出張日時</h2>
-    <div class="row-dt"><div class="tag">自</div><input id="fromDate" type="date"><select id="fromHour"></select></div>
-    <div class="row-dt" style="margin-bottom:0"><div class="tag">至</div><input id="toDate" type="date"><select id="toHour"></select></div>
+    <div class="tabs" id="dateModeTabs"></div><input type="hidden" id="dateMode">
+    <div id="rangeBox">
+      <div class="row-dt"><div class="tag">自</div><input id="fromDate" type="date"><select id="fromHour"></select></div>
+      <div class="row-dt" style="margin-bottom:0"><div class="tag">至</div><input id="toDate" type="date"><select id="toHour"></select></div>
+    </div>
+    <div id="multiBox" class="hidden">
+      <div class="addrow"><input id="multiAdd" type="date"><button class="btn" id="btnAddDate" type="button">この日を追加</button></div>
+      <div class="chips" id="multiList"></div>
+      <div class="row-dt" style="margin-bottom:0;grid-template-columns:60px 1fr 1fr"><div class="tag">時間</div><select id="mFromHour"></select><select id="mToHour"></select></div>
+    </div>
   </section>
 
   <section>
@@ -121,6 +140,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
   <section>
     <h2 style="display:flex;align-items:center;justify-content:space-between">出張者・作業時間
       <button class="btn small" id="btnCopyTimes" type="button">1人目の時間を全員にコピー</button></h2>
+    <div class="tabs" id="durModeTabs"></div><input type="hidden" id="durMode">
     <div id="staffRows"></div>
   </section>
 
@@ -176,6 +196,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
   </div>
 </div>
 
+<!-- 履歴 -->
+<div class="overlay hidden" id="histOverlay">
+  <div class="panel" style="width:min(680px,100%)">
+    <div class="panel-head"><h3>過去の報告書から呼び出す</h3></div>
+    <div class="panel-body"><p class="note" style="margin:0 0 10px">PDFを保存した報告書が、新しい順に最大30件残ります。呼び出すと日付は今日になり、サインは空になります。</p><div id="histList"></div></div>
+    <div class="panel-foot"><button class="btn primary" id="histClose" type="button">閉じる</button></div>
+  </div>
+</div>
+
 <!-- 設定 -->
 <div class="overlay hidden" id="setOverlay">
   <div class="panel" style="width:min(620px,100%)">
@@ -215,7 +244,7 @@ function toast(msg){var t=$('toast');t.textContent=msg;t.classList.add('show');c
 
 /* ---------- 画面の組み立て ---------- */
 function hourOptions(sel){var h='<option value="">時</option>';for(var i=0;i<24;i++)h+='<option value="'+i+'">'+i+'時</option>';sel.innerHTML=h}
-hourOptions($('fromHour'));hourOptions($('toHour'));
+hourOptions($('fromHour'));hourOptions($('toHour'));hourOptions($('mFromHour'));hourOptions($('mToHour'));$('mFromHour').options[0].text='開始 時';$('mToHour').options[0].text='終了 時';
 
 var rowsHtml='';
 for(var i=0;i<STAFF_ROWS;i++){
@@ -260,11 +289,32 @@ function syncFree(){
 }
 
 /* ---------- 値の取り出し・復元 ---------- */
-var FIELDS=['venueSel','venueFree','issueDate','workType','fromDate','fromHour','toDate','toHour','work','remarks'];
+var FIELDS=['venueSel','venueFree','issueDate','workType','dateMode','fromDate','fromHour','toDate','toHour','mFromHour','mToHour','durMode','work','remarks'];
+var dates=[];
+var WD='日月火水木金土';
+function dLabel(s){var a=s.split('-'),d=new Date(+a[0],+a[1]-1,+a[2]);return (+a[1])+'/'+(+a[2])+'（'+WD.charAt(d.getDay())+'）'}
+function renderDates(){$('multiList').innerHTML=dates.map(function(v,i){return '<span class="chip">'+dLabel(v)+'<button type="button" data-i="'+i+'" aria-label="削除">✕</button></span>'}).join('')}
+$('btnAddDate').onclick=function(){var v=$('multiAdd').value;if(!v){toast('日付を選んでから押してください');return}
+  if(dates.indexOf(v)>=0){toast('その日はもう入っています');return}dates.push(v);dates.sort();renderDates();saveDraft();toast(dLabel(v)+' を追加しました')};
+$('multiList').addEventListener('click',function(e){var b=e.target.closest('button[data-i]');if(!b)return;dates.splice(+b.dataset.i,1);renderDates();saveDraft()});
+function seg(boxId,hidId,opts,def){
+  var v=$(hidId).value||def;
+  $(boxId).innerHTML=opts.map(function(o){return '<button type="button" data-v="'+o[0]+'" class="'+(v===o[0]?'on':'')+'">'+o[1]+'</button>'}).join('');
+}
+function renderModes(){
+  seg('dateModeTabs','dateMode',[['range','連続した日（自〜至）'],['multi','とびとびの日（複数）']],'range');
+  seg('durModeTabs','durMode',[['on','作業時間計を出す'],['off','作業時間計を出さない']],'on');
+  var multi=$('dateMode').value==='multi';
+  $('rangeBox').classList.toggle('hidden',multi);$('multiBox').classList.toggle('hidden',!multi);
+  $('staffRows').classList.toggle('nodur',$('durMode').value==='off');
+}
+[['dateModeTabs','dateMode'],['durModeTabs','durMode']].forEach(function(a){
+  $(a[0]).addEventListener('click',function(e){var b=e.target.closest('button[data-v]');if(!b)return;$(a[1]).value=b.dataset.v;renderModes();saveDraft()});
+});
 function collect(){
   var d={};FIELDS.forEach(function(f){d[f]=$(f).value});
   d.staff=[];for(var i=0;i<STAFF_ROWS;i++)d.staff.push({sel:$('s'+i+'name').value,free:$('s'+i+'free').value,from:getT(i,'f'),to:getT(i,'t')});
-  d.sig=sig;return d;
+  d.sig=sig;d.dates=dates.slice();return d;
 }
 function setSelect(selId,freeId,val,free,items){
   if(val && val!==FREE && items.indexOf(val)<0){ $(selId).value=FREE; $(freeId).value=val; }
@@ -276,6 +326,7 @@ function restore(d){
   (d.staff||[]).forEach(function(s,i){if(i>=STAFF_ROWS)return;setSelect('s'+i+'name','s'+i+'free',s.sel,s.free,lists.staff);setT(i,'f',s.from);setT(i,'t',s.to)});
   if(!$('workType').value && WORK_TYPES.indexOf(($('work').value||'').trim())>=0){$('workType').value=$('work').value.trim();$('work').value=''}
   renderTabs();
+  dates=(d.dates||[]).slice();renderDates();renderModes();
   setSig(d.sig||null,true);
   syncFree();updateDur();
 }
@@ -284,7 +335,7 @@ function renderTabs(){
   $('workTabs').innerHTML=WORK_TYPES.map(function(v){return '<button type="button" data-v="'+esc(v)+'" class="'+($('workType').value===v?'on':'')+'">'+esc(v)+'</button>'}).join('');
 }
 $('workTabs').addEventListener('click',function(e){var b=e.target.closest('button[data-v]');if(!b)return;$('workType').value=b.dataset.v;renderTabs();saveDraft()});
-function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,workType:WORK_TYPES[0],work:'',staff:[]}}
+function blank(){var t=today();return{issueDate:t,fromDate:t,toDate:t,dateMode:'range',durMode:'on',dates:[],workType:WORK_TYPES[0],work:'',staff:[]}}
 function clearForm(){
   FIELDS.forEach(function(f){$(f).value=''});
   for(var i=0;i<STAFF_ROWS;i++){$('s'+i+'name').value='';$('s'+i+'free').value='';setT(i,'f','');setT(i,'t','')}
@@ -369,6 +420,16 @@ $('btnSigClear').onclick=function(){if(window.confirm('サインを消します�
 var PW=595.28,PH=841.89,K=480/654,LEFT=57.6,TOP=108;
 var FONT='"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo","Noto Sans CJK JP",sans-serif';
 function X(p){return LEFT+(p-117)*K}function Y(p){return TOP+(p-145)*K}
+// 例：2026年11月4日・11日・18日、12月2日（計4日）
+function multiText(ds){
+  if(!ds.length)return '';var out='',py='',pm='';
+  ds.forEach(function(v,i){var a=v.split('-'),y=a[0],m=String(+a[1]),dd=String(+a[2]);
+    if(y!==py){out+=(i?'、':'')+y+'年'+m+'月'+dd+'日'}
+    else if(m!==pm){out+='、'+m+'月'+dd+'日'}
+    else out+='・'+dd+'日';
+    py=y;pm=m});
+  return out+'（計'+ds.length+'日）';
+}
 function venueName(d){return d.venueSel===FREE?(d.venueFree||'').trim():(d.venueSel||'')}
 function staffName(s){return s.sel===FREE?(s.free||'').trim():(s.sel||'')}
 function ymd(s){if(!s)return null;var a=s.split('-');return{y:a[0],m:String(+a[1]),d:String(+a[2])}}
@@ -409,7 +470,7 @@ function drawForm(ctx,d){
   t('発行日',351,154,11,'left');t('年',445,179);t('月',521,179);t('日',598,179);
   t('受注No.',621,154,11,'left');
   t('出張日時',127,201,11,'left');
-  [['自',137],['年',252],['月',330],['日',406],['時',483],['至',560],['日',637],['時',714]].forEach(function(a){t(a[0],a[1],226)});
+  if(d.dateMode!=='multi')[['自',137],['年',252],['月',330],['日',406],['時',483],['至',560],['日',637],['時',714]].forEach(function(a){t(a[0],a[1],226)});
   t('作業内容',130,252,13,'left');font(13);var uw=ctx.measureText('作業内容').width;
   ctx.beginPath();ctx.lineWidth=0.6;ctx.moveTo(X(130),Y(261));ctx.lineTo(X(130)+uw,Y(261));ctx.stroke();
   t('出 張 者 名',213,331,13);t('作 業 時 間',463,331,13);t('作業時間計',656,331,12);t('総 時 間',733,331,13);
@@ -422,10 +483,16 @@ function drawForm(ctx,d){
   // 値
   fit(venueName(d),222,179,195,15);
   var iss=ymd(d.issueDate);if(iss){t(iss.y,400,179,14);t(iss.m,483,179,14);t(iss.d,560,179,14)}
-  var fd=ymd(d.fromDate);if(fd){t(fd.y,195,226,14);t(fd.m,291,226,14);t(fd.d,368,226,14)}
-  if(d.fromHour!=='')t(d.fromHour,445,226,14);
-  var td=ymd(d.toDate);if(td){t(td.d,598,226,14)}
-  if(d.toHour!=='')t(d.toHour,676,226,14);
+  if(d.dateMode==='multi'){
+    var txt=multiText(d.dates||[]);
+    if(txt){var hr='';if(d.mFromHour!==''||d.mToHour!=='')hr='　'+(d.mFromHour!==''?d.mFromHour+'時':'')+'〜'+(d.mToHour!==''?d.mToHour+'時':'');
+      fit(txt+hr,125,226,640,14,'left')}
+  }else{
+    var fd=ymd(d.fromDate);if(fd){t(fd.y,195,226,14);t(fd.m,291,226,14);t(fd.d,368,226,14)}
+    if(d.fromHour!=='')t(d.fromHour,445,226,14);
+    var td=ymd(d.toDate);if(td){t(td.d,598,226,14)}
+    if(d.toHour!=='')t(d.toHour,676,226,14);
+  }
   // 作業内容（1行目はラベルの右、2・3行目は全幅）
   if(d.workType){
     t(d.workType,125,280,14,'left');
@@ -440,7 +507,7 @@ function drawForm(ctx,d){
     fit(name,213,cy,180,14);
     if(s.from){var a=s.from.split(':');t(String(+a[0]),340,cy,14);t(a[1],412,cy,14)}
     if(s.to){var b=s.to.split(':');t(String(+b[0]),494,cy,14);t(b[1],566,cy,14)}
-    fit(dur(s.from,s.to),656,cy,70,14);
+    if(d.durMode!=='off')fit(dur(s.from,s.to),656,cy,70,14);
   });
   // 備考
   var rb=block(d.remarks,[218],4,[12,11,10,9,8]);
@@ -472,13 +539,45 @@ function makePdf(jpg,w,h){
   return new Blob(parts,{type:'application/pdf'});
 }
 function fileName(d){
-  var date=(d.fromDate||d.issueDate||today()),v=venueName(d)||'出張先未入力';
+  var date=((d.dateMode==='multi'?(d.dates||[])[0]:d.fromDate)||d.issueDate||today()),v=venueName(d)||'出張先未入力';
   return (date+'_'+v+'_出張作業報告書.pdf').replace(/[\\\/:*?"<>|]/g,'_');
 }
 
-var pdfBlob=null,pdfName='';
+var pdfBlob=null,pdfName='',lastData=null;
+/* ---------- 履歴 ---------- */
+var LS_HIST='shutcho.history.v1';
+function histKey(d){var c=JSON.parse(JSON.stringify(d));delete c.sig;return JSON.stringify(c)}
+function pushHistory(d){
+  if(!d)return;var h=load(LS_HIST,[]),c=JSON.parse(JSON.stringify(d));delete c.sig;
+  var k=histKey(c);h=h.filter(function(e){return histKey(e.data)!==k});
+  h.unshift({at:new Date().toISOString(),data:c});if(h.length>30)h.length=30;store(LS_HIST,h);
+}
+function renderHist(){
+  var h=load(LS_HIST,[]);
+  if(!h.length){$('histList').innerHTML='<p class="note">まだ履歴がありません。PDFを保存すると、ここに残ります。</p>';return}
+  $('histList').innerHTML=h.map(function(e,i){var d=e.data;
+    var dt=d.dateMode==='multi'?((d.dates||[]).map(function(v){var a=v.split('-');return (+a[1])+'/'+(+a[2])}).join('・')):(d.fromDate||'').replace(/^\d+-0?(\d+)-0?(\d+)$/,'$1/$2');
+    var names=(d.staff||[]).map(staffName).filter(Boolean);
+    return '<div class="hitem"><div class="ht">'+esc(venueName(d)||'出張先なし')+'</div>'+
+      '<div class="hs">'+esc(dt||'日付なし')+'　'+esc(d.workType||'')+'<br>出張者：'+esc(names.join('、')||'なし')+'</div>'+
+      '<div class="hb"><button class="btn small primary" data-a="staff" data-i="'+i+'">出張者だけ使う</button>'+
+      '<button class="btn small" data-a="all" data-i="'+i+'">全部使う</button>'+
+      '<button class="btn small danger" data-a="del" data-i="'+i+'">削除</button></div></div>'}).join('');
+}
+$('histList').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-a]');if(!b)return;var h=load(LS_HIST,[]),it=h[+b.dataset.i];if(!it)return;
+  if(b.dataset.a==='del'){h.splice(+b.dataset.i,1);store(LS_HIST,h);renderHist();return}
+  var cur=collect(),src=JSON.parse(JSON.stringify(it.data)),t=today(),next;
+  if(b.dataset.a==='staff'){next=cur;next.staff=src.staff;}
+  else{next=src;next.issueDate=t;next.fromDate=t;next.toDate=t;next.dates=[];next.sig=null;}
+  for(var i=0;i<STAFF_ROWS;i++){$('s'+i+'name').value='';$('s'+i+'free').value='';setT(i,'f','');setT(i,'t','')}
+  restore(next);saveDraft();$('histOverlay').classList.add('hidden');window.scrollTo(0,0);
+  toast(b.dataset.a==='staff'?'出張者を呼び出しました':'前の内容を呼び出しました（日付は今日）');
+});
+$('btnHist').onclick=function(){renderHist();$('histOverlay').classList.remove('hidden')};
+$('histClose').onclick=function(){$('histOverlay').classList.add('hidden')};
 function buildPreview(){
-  var d=collect();
+  var d=collect();lastData=d;
   var warns=[];
   if(!venueName(d))warns.push('出張先が入っていません');
   if(!(d.staff||[]).some(function(s){return staffName(s)}))warns.push('出張者が入っていません');
@@ -510,7 +609,7 @@ $('pvSignHit').onclick=openSig;$('pvSign').onclick=openSig;
 $('pvBack').onclick=function(){$('pvOverlay').classList.add('hidden')};
 // 共有メニュー（iPad：ファイルに保存／Dropbox、Android：Dropbox／Googleドライブ など）
 $('pvSave').onclick=function(){
-  if(!pdfBlob)return;
+  if(!pdfBlob)return;pushHistory(lastData);
   var file=null;try{file=new File([pdfBlob],pdfName,{type:'application/pdf'})}catch(e){}
   if(!(file&&navigator.canShare&&navigator.canShare({files:[file]}))){
     toast('このブラウザは共有に対応していません。「この端末に保存」を使ってください');return;
@@ -522,7 +621,7 @@ $('pvSave').onclick=function(){
 };
 // 端末に直接保存（保存先を選べるブラウザでは保存先の画面を出す）
 $('pvDl').onclick=function(){
-  if(!pdfBlob)return;
+  if(!pdfBlob)return;pushHistory(lastData);
   if(window.showSaveFilePicker){
     window.showSaveFilePicker({suggestedName:pdfName,types:[{description:'PDF',accept:{'application/pdf':['.pdf']}}]})
       .then(function(h){return h.createWritable().then(function(w){return w.write(pdfBlob).then(function(){return w.close()})})})
